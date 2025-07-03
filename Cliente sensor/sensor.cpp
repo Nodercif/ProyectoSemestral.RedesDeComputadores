@@ -8,6 +8,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <nlohmann/json.hpp>
 
 struct SensorPacket {
     int16_t id;
@@ -40,7 +41,7 @@ int main() {
 
     sockaddr_in serverAddr{};
     serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(5000); // Puerto del servidor intermedio
+    serverAddr.sin_port = htons(8080); // Puerto del servidor intermedio
     inet_pton(AF_INET, "127.0.0.1", &serverAddr.sin_addr); // Cambia a IP del servidor real
 
     if (connect(sock, (sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
@@ -52,25 +53,33 @@ int main() {
     std::cout << "Conectado al servidor.\n";
 
     while (true) {
-        SensorPacket packet;
-        packet.id = 1;
+        // Generar datos
+        int16_t id = 1;
+        int64_t timestamp = std::chrono::duration_cast<std::chrono::seconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        float temperatura = valorAleatorio(20.0, 100.0);
+        float presion = valorAleatorio(950.0, 1050.0);
+        float humedad = valorAleatorio(30.0, 100.0);
 
-        auto now = std::chrono::system_clock::now();
-        packet.timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
+        // Crear el paquete para la firma
+        SensorPacket packet{id, timestamp, temperatura, presion, humedad, 0};
+        uint32_t firma_simulada = generarFirma(packet);
 
-        packet.temperatura = valorAleatorio(20.0, 100.0);
-        packet.presion = valorAleatorio(950.0, 1050.0);
-        packet.humedad = valorAleatorio(30.0, 100.0);
-        packet.firma = generarFirma(packet);
+        // Crear JSON con los datos
+        nlohmann::json j;
+        j["id"] = id;
+        j["timestamp"] = timestamp;
+        j["temperatura"] = temperatura;
+        j["presion"] = presion;
+        j["humedad"] = humedad;
 
-        if (send(sock, &packet, sizeof(packet), 0) < 0) {
-            perror("Error al enviar datos");
-        } else {
-            std::cout << "Paquete enviado - Temp: " << packet.temperatura
-                      << ", Presión: " << packet.presion
-                      << ", Humedad: " << packet.humedad << "\n";
-        }
-        std::this_thread::sleep_for(std::chrono::seconds(2)); // Esperar 2s
+        std::string mensaje_json = j.dump();
+
+        // Enviar [firma][datos]
+        send(sock, &firma_simulada, sizeof(firma_simulada), 0);
+        send(sock, mensaje_json.c_str(), mensaje_json.size(), 0);
+
+        std::this_thread::sleep_for(std::chrono::seconds(1));
     }
     close(sock);
     return 0;

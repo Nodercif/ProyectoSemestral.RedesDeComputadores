@@ -32,3 +32,7 @@
 *.exe
 *.out
 *.app
+
+/seguridad/          # Ignora toda la carpeta
+*.pem                # Ignora todos los archivos .pemseguridad/clave_privada.pem
+venv/
