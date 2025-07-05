@@ -18,7 +18,7 @@ def cargar_clave_publica():
             return f.read()
     except FileNotFoundError:
         raise Exception(
-            f"❌ No se encontró 'clave_publica.pem' en {ruta_clave}.\n"
+            f"No se encontró 'clave_publica.pem' en {ruta_clave}.\n"
             "Solución: Asegúrate de que existe la carpeta 'seguridad' con el archivo PEM."
         )
 
@@ -39,7 +39,7 @@ def main():
         # Conectar al socket                                                                                                                                                                                                                                      
         s.bind((host_tcp, puerto_tcp))                                                                # s.bind() establece la dirección y puerto                                                                                                                          
         s.listen(1)                                                                                   # s.listen(1) permite una conexión entrante                                                                                                                         
-        print(f"🔄 Servidor Intermedio escuchando en {host_tcp}:{puerto_tcp}...")  
+        print(f"Servidor Intermedio escuchando en {host_tcp}:{puerto_tcp}...")  
         conexion, direccion = s.accept()                                                              # s.accept() acepta una conexión entrante y devuelve un nuevo socket de conexión y la dirección del cliente
         while True:
             try:
