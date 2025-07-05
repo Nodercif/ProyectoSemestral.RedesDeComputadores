@@ -3,14 +3,12 @@ import json
 import os
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
-from opcua import Client
+from opcua import Client, Server
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 from pathlib import Path
 
-
 def cargar_clave_publica():
-    # Ruta relativa a la carpeta 'seguridad' dentro del proyecto
     ruta_clave = Path(__file__).parent.parent / "Seguridad" / "clave_publica.pem"
     
     try:
@@ -22,15 +20,96 @@ def cargar_clave_publica():
             "Solución: Asegúrate de que existe la carpeta 'Seguridad' con el archivo PEM."
         )
 
+def verificar_conexion_opcua(url):
+    """Paso 1 de diagnóstico: Verificar conexión OPC UA"""
+    print("\n=== Diagnóstico OPC UA ===")
+    print("Paso 1: Verificando conexión al servidor OPC UA...")
+    client = Client(url)
+    try:
+        client.connect()
+        print("✓ Conexión OPC UA exitosa!")
+        client.disconnect()
+        return True
+    except Exception as e:
+        print(f"✗ Error conectando a OPC UA: {e}")
+        return False
+    finally:
+        try:
+            client.disconnect()
+        except:
+            pass
+
+def verificar_nodo_opcua(url, nodo):
+    """Paso 2 de diagnóstico: Verificar nodo OPC UA"""
+    print("\nPaso 2: Verificando nodo OPC UA...")
+    client = Client(url)
+    try:
+        client.connect()
+        try:
+            node = client.get_node(nodo)
+            valor = node.get_value()
+            print(f"✓ Nodo encontrado. Valor actual: {valor}")
+            return True
+        except Exception as e:
+            print(f"✗ Error accediendo al nodo: {e}")
+            return False
+    except Exception as e:
+        print(f"✗ Error de conexión durante verificación de nodo: {e}")
+        return False
+    finally:
+        try:
+            client.disconnect()
+        except:
+            pass
+
+def crear_nodo_opcua_si_no_existe(url, nodo):
+    """Paso 3 de diagnóstico: Crear nodo si no existe"""
+    print("\nPaso 3: Intentando crear nodo si no existe...")
+    server = Server()
+    try:
+        server.set_endpoint(url)
+        server.start()
+        objects = server.get_objects_node()
+        
+        # Crear estructura básica si no existe
+        try:
+            myobj = objects.add_object(2, "Sensores")
+            myvar = myobj.add_variable(nodo, "DatosSensor", 0.0)
+            myvar.set_writable()
+            print(f"✓ Nodo creado exitosamente: {nodo}")
+            return True
+        except Exception as e:
+            print(f"✗ Error creando nodo: {e}")
+            return False
+    except Exception as e:
+        print(f"✗ Error iniciando servidor OPC UA temporal: {e}")
+        return False
+    finally:
+        try:
+            server.stop()
+        except:
+            pass
+
 def main():
-    # Configuración (ajusta estos valores)
+    # Configuración
     host_tcp = "localhost"
     puerto_tcp = 8080
-    clave_publica_pem = cargar_clave_publica()  # Cargar clave pública desde el archivo
+    clave_publica_pem = cargar_clave_publica()
     url_opcua = "opc.tcp://localhost:4840"
     nodo_opcua = "ns=2;i=123"
 
-    # Cargar clave pública para verificar firma
+    # Ejecutar diagnósticos OPC UA
+    if not verificar_conexion_opcua(url_opcua):
+        if not crear_nodo_opcua_si_no_existe(url_opcua, nodo_opcua):
+            print("\n⚠️ No se pudo conectar al servidor OPC UA ni crear nodo. Verifica que el servidor OPC UA esté ejecutándose.")
+            return
+
+    if not verificar_nodo_opcua(url_opcua, nodo_opcua):
+        if not crear_nodo_opcua_si_no_existe(url_opcua, nodo_opcua):
+            print("\n⚠️ No se pudo verificar ni crear el nodo OPC UA. El sistema puede no funcionar correctamente.")
+            return
+
+    # Cargar clave pública
     clave_publica = serialization.load_pem_public_key(clave_publica_pem)
 
     # Crear socket TCP
@@ -38,7 +117,7 @@ def main():
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind((host_tcp, puerto_tcp))
         s.listen(1)
-        print(f"Servidor Intermedio escuchando en {host_tcp}:{puerto_tcp}...")
+        print(f"\nServidor Intermedio escuchando en {host_tcp}:{puerto_tcp}...")
         
         while True:
             try:
@@ -46,14 +125,14 @@ def main():
                 print(f"\nConexión entrante desde: {direccion}")
                 
                 with conexion:
-                    # Recibir primero la firma (256 bytes)
+                    # Recibir firma (256 bytes)
                     firma = conexion.recv(256)
                     if len(firma) != 256:
                         print("Error: Firma incompleta")
                         conexion.sendall(b"\x00")
                         continue
                     
-                    # Recibir el JSON
+                    # Recibir JSON
                     datos_recibidos = b""
                     while True:
                         chunk = conexion.recv(4096)
@@ -61,8 +140,7 @@ def main():
                             break
                         datos_recibidos += chunk
                         try:
-                            mensaje_json = datos_recibidos.decode('utf-8')
-                            json.loads(mensaje_json)  # Validar JSON
+                            json.loads(datos_recibidos.decode('utf-8'))
                             break
                         except (UnicodeDecodeError, json.JSONDecodeError):
                             continue
@@ -85,14 +163,18 @@ def main():
                         cliente = Client(url_opcua)
                         try:
                             cliente.connect()
-                            cliente.get_node(nodo_opcua).set_value(datos)
+                            # Enviar solo el valor de temperatura como ejemplo
+                            cliente.get_node(nodo_opcua).set_value(datos["temperatura"])
                             print("→ Enviado a OPC UA")
-                            conexion.sendall(b"\x01")  # Confirmación EXITOSA
+                            conexion.sendall(b"\x01")
                         except Exception as opc_error:
                             print(f"Error OPC UA: {str(opc_error)}")
-                            conexion.sendall(b"\x00")  # Confirmación FALLIDA
+                            conexion.sendall(b"\x00")
                         finally:
-                            cliente.disconnect()
+                            try:
+                                cliente.disconnect()
+                            except:
+                                pass
 
                     except Exception as e:
                         print(f"Error de verificación: {str(e)}")
