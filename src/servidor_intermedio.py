@@ -19,15 +19,14 @@ def cargar_clave_publica():
     except FileNotFoundError:
         raise Exception(
             f"No se encontró 'clave_publica.pem' en {ruta_clave}.\n"
-            "Solución: Asegúrate de que existe la carpeta 'seguridad' con el archivo PEM."
+            "Solución: Asegúrate de que existe la carpeta 'Seguridad' con el archivo PEM."
         )
 
 def main():
-
     # Configuración (ajusta estos valores)
     host_tcp = "localhost"
     puerto_tcp = 8080
-    clave_publica_pem = cargar_clave_publica()                                                        # Cargar clave pública desde el archivo
+    clave_publica_pem = cargar_clave_publica()  # Cargar clave pública desde el archivo
     url_opcua = "opc.tcp://localhost:4840"
     nodo_opcua = "ns=2;i=123"
 
@@ -35,54 +34,76 @@ def main():
     clave_publica = serialization.load_pem_public_key(clave_publica_pem)
 
     # Crear socket TCP
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:                                      # crea un nuevo socket al cual se le indica que el socket será de tipo stream (TCP) y lo usa como contexto para que cierre  automáticamente al salir del bloque with
-        # Conectar al socket                                                                                                                                                                                                                                      
-        s.bind((host_tcp, puerto_tcp))                                                                # s.bind() establece la dirección y puerto                                                                                                                          
-        s.listen(1)                                                                                   # s.listen(1) permite una conexión entrante                                                                                                                         
-        print(f"Servidor Intermedio escuchando en {host_tcp}:{puerto_tcp}...")  
-        conexion, direccion = s.accept()                                                              # s.accept() acepta una conexión entrante y devuelve un nuevo socket de conexión y la dirección del cliente
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.bind((host_tcp, puerto_tcp))
+        s.listen(1)
+        print(f"Servidor Intermedio escuchando en {host_tcp}:{puerto_tcp}...")
+        
         while True:
             try:
                 conexion, direccion = s.accept()
-                print(f"conexion entrante desde {direccion}")                                         # acepta una conexión entrante y devuelve un nuevo socket de conexión y la dirección del cliente                                                                                                                                                                          
-                with conexion:                                                                        # usa el socket de conexión como contexto para que se cierre automáticamente al salir del bloque with                                                               
-                    # Recibir datos: [firma][datos]                                                                                                                                                                                                                       
-                    datos_recibidos = conexion.recv(4096)                                             # recibe hasta 4096 bytes de datos del socket de conexión                                                                                                           
-                    if not datos_recibidos:  # Si no hay datos, cerrar
-                        continue                                                                      # el resto de los datos son el mensaje en binario
+                print(f"\nConexión entrante desde: {direccion}")
+                
+                with conexion:
+                    # Recibir primero la firma (256 bytes)
+                    firma = conexion.recv(256)
+                    if len(firma) != 256:
+                        print("Error: Firma incompleta")
+                        conexion.sendall(b"\x00")
+                        continue
+                    
+                    # Recibir el JSON
+                    datos_recibidos = b""
+                    while True:
+                        chunk = conexion.recv(4096)
+                        if not chunk:
+                            break
+                        datos_recibidos += chunk
+                        try:
+                            mensaje_json = datos_recibidos.decode('utf-8')
+                            json.loads(mensaje_json)  # Validar JSON
+                            break
+                        except (UnicodeDecodeError, json.JSONDecodeError):
+                            continue
 
-                    # Procesar datos (tu código original)
-                    firma = datos_recibidos[:256]
-                    mensaje_binario = datos_recibidos[256:]
+                    print(f"Firma recibida (hex): {firma.hex()[:20]}...")
+                    print(f"JSON recibido: {datos_recibidos.decode('utf-8')[:100]}...")
 
-                    # Verificar firma
                     try:
+                        # Verificar firma
                         clave_publica.verify(
                             firma,
-                            mensaje_binario,
-                            padding.PKCS1v15(),                                                       # usa el padding PKCS1v15 para la verificación de la firma
-                            hashes.SHA256()                                                           # usa el hash SHA256 para la verificación de la firma
+                            datos_recibidos,
+                            padding.PKCS1v15(),
+                            hashes.SHA256()
                         )
-                        mensaje_json = mensaje_binario.decode('utf-8')
-                        datos = json.loads(mensaje_json)
+                        datos = json.loads(datos_recibidos.decode('utf-8'))
                         print("Datos verificados:", datos)
-
+                        
                         # Enviar a OPC UA
                         cliente = Client(url_opcua)
                         try:
                             cliente.connect()
-                            nodo = cliente.get_node(nodo_opcua)
-                            nodo.set_value(datos)
-                            print("Enviado a OPC UA")
+                            cliente.get_node(nodo_opcua).set_value(datos)
+                            print("→ Enviado a OPC UA")
+                            conexion.sendall(b"\x01")  # Confirmación EXITOSA
+                        except Exception as opc_error:
+                            print(f"Error OPC UA: {str(opc_error)}")
+                            conexion.sendall(b"\x00")  # Confirmación FALLIDA
                         finally:
                             cliente.disconnect()
 
                     except Exception as e:
-                        print(f" Error: {str(e)}")
+                        print(f"Error de verificación: {str(e)}")
+                        conexion.sendall(b"\x00")
 
             except KeyboardInterrupt:
-                print("\n Servidor detenido manualmente")
+                print("\nServidor detenido manualmente")
                 break
+            except Exception as e:
+                print(f"Error en conexión: {str(e)}")
+                continue
 
 if __name__ == "__main__":
     main()
