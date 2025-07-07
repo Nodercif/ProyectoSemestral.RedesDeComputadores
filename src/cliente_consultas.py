@@ -1,15 +1,41 @@
+from opcua import Client
 import time
+from datetime import datetime
 
-import httpx
+# Configuración OPC UA
+OPCUA_URL = "opc.tcp://localhost:4840"
+NODOS = {
+    "temperatura": "ns=2;i=123",
+    "humedad": "ns=2;i=124",
+    "presion": "ns=2;i=125"
+}
 
-API_URL = "http://127.0.0.1:8000/mediciones"
 INTERVALO_SEGUNDOS = 5
 
+# Umbrales de alerta (los mismos que tenías)
 TEMP_MAX = 80
 PRESION_MIN = 900
 PRESION_MAX = 1500
 HUMEDAD_MIN = 20
 HUMEDAD_MAX = 90
+
+def obtener_datos_opcua():
+    client = Client(OPCUA_URL)
+    try:
+        client.connect()
+        datos = {
+            "id_sensor": 1,  # Puedes obtener esto de otro nodo si es necesario
+            "timestamp": datetime.now().isoformat(),
+            "temperatura": client.get_node(NODOS["temperatura"]).get_value(),
+            "humedad": client.get_node(NODOS["humedad"]).get_value(),
+            "presion": client.get_node(NODOS["presion"]).get_value()
+        }
+        return datos
+    except Exception as e:
+        print(f"Error OPC UA: {e}")
+        return None
+    finally:
+        client.disconnect()
 
 def revisar_alertas(medicion):
     alertas = []
@@ -30,22 +56,17 @@ def mostrar_alertas(alertas, medicion):
         print(f"Todo OK - Sensor {medicion['id_sensor']} @ {medicion['timestamp']}")
 
 def main():
-    print("Iniciando cliente de consulta...")
+    print("Iniciando cliente de consulta OPC UA...")
     while True:
         try:
-            respuesta = httpx.get(API_URL)
-            if respuesta.status_code == 200:
-                datos = respuesta.json()
-                if not datos:
-                    print("No hay datos disponibles aún.")
-                else:
-                    ultima = datos[0]
-                    alertas = revisar_alertas(ultima)
-                    mostrar_alertas(alertas, ultima)
+            datos = obtener_datos_opcua()
+            if datos:
+                alertas = revisar_alertas(datos)
+                mostrar_alertas(alertas, datos)
             else:
-                print("Error al consultar la API:", respuesta.status_code)
+                print("No se pudieron obtener datos del servidor OPC UA")
         except Exception as e:
-            print("Error de conexión:", e)
+            print("Error general:", e)
 
         time.sleep(INTERVALO_SEGUNDOS)
 
