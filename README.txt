@@ -22,7 +22,15 @@ pip install fastapi uvicorn httpx cryptography python-opcua
 3. Instalar biblioteca JSON para C++:
 sudo apt install -y nlohmann-json3-dev
 
-Ejecución del Sistema (4 Terminales):
+4. Instalar OPC UA
+pip install opcua
+
+En caso de no permitirse la instalación en WSL al ser un ambiente externamente gestionado:
+Opción                        | Ventajas                                      | Riesgos
+--break-system-packages      | Rápido y directo                              | Puede romper dependencias del sistema
+Entorno virtual (venv)       | Seguro, limpio, recomendado para proyectos    | Requiere un paso extra (activar entorno)
+
+Ejecución del Sistema (5 Terminales):
 ---------------------------------------
 
 Terminal 1: Servidor Final (API REST)
@@ -30,35 +38,26 @@ cd src/servidor_final/
 uvicorn main:app --reload
 Verificación: Abrir en navegador http://127.0.0.1:8000/docs
 
-Terminal 2: Servidor Intermedio (Python)
+Terminal 2: Servidor OPC UA (Python)
+cd src/
+python3 servidor_opcua.py
+
+Terminal 3: Servidor Intermedio (Python)
 cd src/
 python3 servidor_intermedio.py
 Verificación: Debe mostrar "Servidor Intermedio escuchando en localhost:8080..."
 
-Terminal 3: Cliente Sensor (C++)
+Terminal 4: Cliente Sensor (C++)
 cd Cliente\ sensor/
 g++ sensor.cpp -o sensor -I/usr/include/nlohmann -lssl -lcrypto && ./sensor
 Verificación: Debe mostrar "Conectado al servidor. Enviando datos: Temp=25.5, Presión=1013.2..."
 
-Terminal 4: Cliente de Consulta (Python)
+Terminal 5: Cliente de Consulta (Python)
 cd src/
 python3 cliente_consultas.py
 Verificación: Mostrará datos cada 5 segundos: "[{"temperatura": 25.5, "presion": 1013.2, "humedad": 60.0}]"
 
-Solución de Problemas Comunes:
--------------------------------
-
-1. Error "ModuleNotFoundError":
-pip install <módulo_faltante>
-
-2. Cliente Sensor no envía datos:
-- Verificar puerto del Servidor Intermedio (8080)
-- Verificar archivo clave_publica.pem en Seguridad/
-
-3. API no devuelve datos:
-curl http://127.0.0.1:8000/mediciones
-
-Notas Adicionales:
+Misceláneos:
 --------------------
 Versiones Probadas:
 - Python 3.10.12
