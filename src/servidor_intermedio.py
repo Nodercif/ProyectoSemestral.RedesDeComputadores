@@ -4,8 +4,9 @@ from pathlib import Path
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
-from database import crear_tabla, insertar_medicion
 from opcua import Client
+
+from servidor_final.database import crear_tabla, insertar_medicion
 
 
 def cargar_clave_publica():
