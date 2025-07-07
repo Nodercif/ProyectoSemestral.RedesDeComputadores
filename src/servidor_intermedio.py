@@ -1,9 +1,12 @@
-import socket
 import json
+import socket
+from pathlib import Path
+
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
+from database import crear_tabla, insertar_medicion
 from opcua import Client
-from pathlib import Path
+
 
 def cargar_clave_publica():
     # Buscar en varias ubicaciones posibles
@@ -21,7 +24,7 @@ def cargar_clave_publica():
                     return f.read()
             except Exception as e:
                 continue
-    
+            
     raise Exception(
         "No se encontró 'clave_publica.pem' en ninguna de las ubicaciones probadas.\n"
         "Solución: Copia el archivo PEM a una de estas rutas:\n" +
@@ -34,11 +37,11 @@ def verificar_conexion_opcua(url):
     client = Client(url)
     try:
         client.connect()
-        print("✓ Conexión OPC UA exitosa!")
+        print("Conexión OPC UA exitosa!")
         client.disconnect()
         return True
     except Exception as e:
-        print(f"✗ Error conectando a OPC UA: {e}")
+        print(f"Error conectando a OPC UA: {e}")
         return False
     finally:
         try:
@@ -48,20 +51,20 @@ def verificar_conexion_opcua(url):
 
 def verificar_nodo_opcua(url, nodo):
     """Verificar nodo OPC UA"""
-    print("\n=== Verificando nodo OPC UA ===")
+    print("\nVerificando nodo OPC UA")
     client = Client(url)
     try:
         client.connect()
         try:
             node = client.get_node(nodo)
             valor = node.get_value()
-            print(f"✓ Nodo encontrado. Valor actual: {valor}")
+            print(f"Nodo encontrado. Valor actual: {valor}")
             return True
         except Exception as e:
-            print(f"✗ Error accediendo al nodo: {e}")
+            print(f"Error accediendo al nodo: {e}")
             return False
     except Exception as e:
-        print(f"✗ Error de conexión durante verificación de nodo: {e}")
+        print(f"Error de conexión durante verificación de nodo: {e}")
         return False
     finally:
         try:
@@ -76,18 +79,21 @@ def main():
     clave_publica_pem = cargar_clave_publica()
     url_opcua = "opc.tcp://localhost:4840"
     nodo_opcua = "ns=2;i=123"
+    
+    # Iniciar la base de datos
+    crear_tabla()
 
     # Cargar clave pública
     clave_publica = serialization.load_pem_public_key(clave_publica_pem)
 
     # Verificar conexión OPC UA una vez al inicio
     if not verificar_conexion_opcua(url_opcua):
-        print("\n⚠️ No se pudo conectar al servidor OPC UA. Verifica que el servidor OPC UA esté ejecutándose.")
+        print("\nNo se pudo conectar al servidor OPC UA. Verifica que el servidor OPC UA esté ejecutándose.")
         return
 
     # Verificar nodo OPC UA una vez al inicio
     if not verificar_nodo_opcua(url_opcua, nodo_opcua):
-        print("\n⚠️ No se pudo encontrar el nodo OPC UA. Verifica la configuración del servidor OPC UA.")
+        print("\nNo se pudo encontrar el nodo OPC UA. Verifica la configuración del servidor OPC UA.")
         return
 
     # Crear socket TCP
@@ -135,7 +141,7 @@ def main():
                                 padding.PKCS1v15(),
                                 hashes.SHA256()
                             )
-                            print("✅ Firma verificada correctamente")
+                            print("Firma verificada correctamente")
                             
                             datos = json.loads(datos_recibidos.decode('utf-8'))
                             print("Datos verificados:", datos)
@@ -148,7 +154,19 @@ def main():
                                 cliente.get_node("ns=2;i=123").set_value(datos["temperatura"])  # Temperatura
                                 cliente.get_node("ns=2;i=124").set_value(datos["humedad"])      # Humedad
                                 cliente.get_node("ns=2;i=125").set_value(datos["presion"])      # Presión
-                                print("→ Datos enviados a OPC UA")
+                                print("Datos enviados a OPC UA")
+                                
+                                # Guardar en base de datos
+                                insertar_medicion(
+                                    id_sensor=datos["id"],
+                                    timestamp=datos["timestamp"],
+                                    temperatura=datos["temperatura"],
+                                    presion=datos["presion"],
+                                    humedad=datos["humedad"]
+                                )
+                                
+                                print("Datos insertados en SQLite")
+                                
                                 conexion.sendall(b"\x01")
                             except Exception as opc_error:
                                 print(f"Error OPC UA: {str(opc_error)}")
@@ -160,7 +178,7 @@ def main():
                                     pass
 
                         except Exception as e:
-                            print(f"❌ Error de verificación (detalle técnico): {str(e)}")
+                            print(f"Error de verificación (detalle técnico): {str(e)}")
                             print(f"Tamaño firma recibida: {len(firma)} bytes")
                             print(f"Clave pública usada: {clave_publica.public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo)}")
                             conexion.sendall(b"\x00")
