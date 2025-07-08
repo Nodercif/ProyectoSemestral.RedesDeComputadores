@@ -1,4 +1,4 @@
-import sqlite3
+import sqlite3  # Base de datos SQLite para almacenar las mediciones
 
 DB_NAME = 'datos.db'
 

@@ -9,20 +9,21 @@ def iniciar_servidor_opcua():
     
     # Configura espacio de nombres
     uri = "urn:ejemplo:servidor-opcua"
-    idx = server.register_namespace(uri)
+    idx = server.register_namespace(uri)  # Registra un espacio de nombres único para el servidor
     
     # Crear objetos y variables
     objetos = server.get_objects_node()
     
     # Crear estructura de sensores
-    sensores = objetos.add_object(idx, "Sensores")
+    sensores = objetos.add_object(idx, "Sensores")  # Crea un objeto llamado "Sensores" en el espacio de nombres registrado
     
     # Crear variables (con los mismos nodos que usa tu servidor intermedio)
     temperatura = sensores.add_variable("ns=2;i=123", "Temperatura", 0.0)
     humedad = sensores.add_variable("ns=2;i=124", "Humedad", 0.0)
     presion = sensores.add_variable("ns=2;i=125", "Presion", 0.0)
     
-    # Hacer las variables editables
+    # Hacer las variables editables para que puedan ser escritas por el cliente
+    # Esto permite que los clientes puedan modificar los valores de estas variables
     temperatura.set_writable()
     humedad.set_writable()
     presion.set_writable()

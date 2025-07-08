@@ -6,7 +6,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from opcua import Client
 
-from servidor_final.database import crear_tabla, insertar_medicion
+from database import crear_tabla, insertar_medicion
 
 
 def cargar_clave_publica():
@@ -35,7 +35,7 @@ def cargar_clave_publica():
 def verificar_conexion_opcua(url):
     """Verificar conexión OPC UA"""
     print("\n=== Verificando conexión OPC UA ===")
-    client = Client(url)
+    client = Client(url)                  # Crea un cliente OPC UA con la URL proporcionada
     try:
         client.connect()
         print("Conexión OPC UA exitosa!")
@@ -46,7 +46,7 @@ def verificar_conexion_opcua(url):
         return False
     finally:
         try:
-            client.disconnect()
+            client.disconnect()           # Asegura que el cliente se desconecte correctamente
         except:
             pass
 
@@ -57,8 +57,8 @@ def verificar_nodo_opcua(url, nodo):
     try:
         client.connect()
         try:
-            node = client.get_node(nodo)
-            valor = node.get_value()
+            node = client.get_node(nodo)                                  # Un nodo en OPC UA es un objeto que representa un recurso o entidad en el servidor OPC UA.
+            valor = node.get_value()                                      # El valor del nodo es el dato actual almacenado en ese nodo.
             print(f"Nodo encontrado. Valor actual: {valor}")
             return True
         except Exception as e:
@@ -69,13 +69,13 @@ def verificar_nodo_opcua(url, nodo):
         return False
     finally:
         try:
-            client.disconnect()
+            client.disconnect()                                           # Asegura que el cliente se desconecte correctamente
         except:
             pass
 
 def main():
-    # Configuración
-    host_tcp = "localhost"
+    # Configuración del servidor intermedio
+    host_tcp = "localhost" 
     puerto_tcp = 8080
     clave_publica_pem = cargar_clave_publica()
     url_opcua = "opc.tcp://localhost:4840"
@@ -85,7 +85,7 @@ def main():
     crear_tabla()
 
     # Cargar clave pública
-    clave_publica = serialization.load_pem_public_key(clave_publica_pem)
+    clave_publica = serialization.load_pem_public_key(clave_publica_pem)  # serialization es un módulo de la biblioteca cryptography que permite convertir objetos a un formato que se puede almacenar o transmitir, y luego reconstruirlos a partir de ese formato.
 
     # Verificar conexión OPC UA una vez al inicio
     if not verificar_conexion_opcua(url_opcua):
@@ -98,20 +98,20 @@ def main():
         return
 
     # Crear socket TCP
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.bind((host_tcp, puerto_tcp))
-        s.listen(1)
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:          # socket.socket(ipv4, TCP)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)           # setsockopt es una función que permite configurar opciones del socket. (nivel de socket, opción a configurar, valor de la opción)
+        s.bind((host_tcp, puerto_tcp))                                    # bind asocia el socket a una dirección y puerto específicos. (dirección IP, puerto)
+        s.listen(1)                                                       # listen pone el socket en modo de escucha para aceptar conexiones entrantes. (1 = número máximo de conexiones en cola)
         print(f"\nServidor Intermedio escuchando en {host_tcp}:{puerto_tcp}...")
         
         while True:
             try:
-                conexion, direccion = s.accept()
+                conexion, direccion = s.accept()                          # socket para comunicación con el cliente, dirección del cliente = accept es una función que acepta una conexión entrante y devuelve un nuevo socket para la comunicación con el cliente y la dirección del cliente.
                 print(f"\nConexión entrante desde: {direccion}")
                 
                 with conexion:
                     # Recibir firma (256 bytes)
-                    firma = conexion.recv(256)
+                    firma = conexion.recv(256)                            # recv es una función que recibe datos del socket. (tamaño máximo de bytes a recibir)
                     if len(firma) != 256:
                         print("Error: Firma incompleta")
                         conexion.sendall(b"\x00")

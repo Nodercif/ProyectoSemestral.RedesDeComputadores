@@ -34,9 +34,9 @@ Ejecución del Sistema (5 Terminales):
 ---------------------------------------
 
 Terminal 1: Servidor Final (API REST)
-cd src/servidor_final/
+cd src/
 uvicorn main:app --reload
-Verificación: Abrir en navegador http://127.0.0.1:8000/docs
+Verificación: Abrir en navegador http://127.0.0.1:8000
 
 Terminal 2: Servidor OPC UA (Python)
 cd src/
